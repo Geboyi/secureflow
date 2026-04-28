@@ -5,6 +5,10 @@ on:
   pull_request:
 
 jobs:
+
+  # ---------------------------
+  # STAGE 1 — SECRETS (HARD FAIL)
+  # ---------------------------
   gitleaks:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
@@ -13,25 +17,30 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # IMPORTANT for full history
+          fetch-depth: 0
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         with:
           args: detect --log-opts="--all"
 
+
+  # ---------------------------
+  # STAGE 2 — CODE ANALYSIS (SOFT FAIL)
+  # ---------------------------
   sonar:
-    name: SonarQube Scan
+    name: SonarCloud Scan
     runs-on: ubuntu-latest
-    needs: gitleaks   # runs after stage 1
+    needs: gitleaks
     if: always()
-    
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Sonar Scan
+      - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@v2
         with:
           args: >
@@ -43,11 +52,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
+  # ---------------------------
+  # STAGE 3 — CONTAINER SCAN (HARD FAIL)
+  # ---------------------------
+  trivy:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+    needs: gitleaks
+    if: always()
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@1b0337c64a51e6268041d8e906c2a4983e9b0857 #points to v0.35.0 
+        uses: aquasecurity/trivy-action@v0.28.0
         with:
           image-ref: 'python:3.9-slim'
           format: 'table'
           exit-code: '1'
           ignore-unfixed: true
-          severity: 'CRITICAL,HIGH'      
+          severity: 'CRITICAL,HIGH'
