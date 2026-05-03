@@ -3,6 +3,9 @@ kind: Deployment
 metadata:
   name: auth-db
   namespace: secureflow
+  labels:
+    app: auth-db
+    team: devsecops
 spec:
   replicas: 1
   selector:
@@ -12,28 +15,52 @@ spec:
     metadata:
       labels:
         svc: auth-db
+        app: auth-db
+        team: devsecops
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "auth-db-role"
+        vault.hashicorp.com/agent-inject-secret-postgres.env: "secureflow/data/auth-db"
+        vault.hashicorp.com/agent-inject-template-postgres.env: |
+          {{ with secret "secureflow/data/auth-db" }}
+          export POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
+          {{ end }}
     spec:
+      serviceAccountName: auth-db-sa
       containers:
         - name: postgres
-          image: postgres:14    # CK-03 — no digest pinning.
+          image: postgres@sha256:bbb8851608e3ff4901156bf6a4bf90735a9d44ae014c03811bfdb2f9c354b18b
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - source /vault/secrets/postgres.env && docker-entrypoint.sh postgres
           env:
             - name: POSTGRES_DB
               value: authdb
             - name: POSTGRES_USER
               value: authuser
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                configMapKeyRef:
-                  name: secureflow-config
-                  key: AUTH_DB_PASSWORD
           ports:
             - containerPort: 5432
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: auth-db
   namespace: secureflow
+  labels:
+    app: auth-db
+    team: devsecops
 spec:
   selector:
     svc: auth-db
@@ -46,6 +73,9 @@ kind: Deployment
 metadata:
   name: transaction-db
   namespace: secureflow
+  labels:
+    app: transaction-db
+    team: devsecops
 spec:
   replicas: 1
   selector:
@@ -55,28 +85,52 @@ spec:
     metadata:
       labels:
         svc: transaction-db
+        app: transaction-db
+        team: devsecops
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "tx-db-role"
+        vault.hashicorp.com/agent-inject-secret-postgres.env: "secureflow/data/transaction-db"
+        vault.hashicorp.com/agent-inject-template-postgres.env: |
+          {{ with secret "secureflow/data/transaction-db" }}
+          export POSTGRES_PASSWORD="{{ .Data.data.POSTGRES_PASSWORD }}"
+          {{ end }}
     spec:
+      serviceAccountName: transaction-db-sa
       containers:
         - name: postgres
-          image: postgres:14
+          image: postgres@sha256:bbb8851608e3ff4901156bf6a4bf90735a9d44ae014c03811bfdb2f9c354b18b
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/bash", "-c"]
+          args:
+            - source /vault/secrets/postgres.env && docker-entrypoint.sh postgres
           env:
             - name: POSTGRES_DB
               value: transactiondb
             - name: POSTGRES_USER
               value: txuser
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                configMapKeyRef:
-                  name: secureflow-config
-                  key: TX_DB_PASSWORD
           ports:
             - containerPort: 5432
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+        
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: transaction-db
   namespace: secureflow
+  labels:
+    app: transaction-db
+    team: devsecops
 spec:
   selector:
     svc: transaction-db

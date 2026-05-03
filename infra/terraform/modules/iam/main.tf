@@ -1,10 +1,5 @@
 variable "project" { type = string }
 
-# IV-08 — EKS node role is given AdministratorAccess.
-# Remediation: scope to specific managed policies (AmazonEKSWorkerNodePolicy,
-# AmazonEKS_CNI_Policy, AmazonEC2ContainerRegistryReadOnly) and use IRSA for
-# application pods that need AWS access.
-
 resource "aws_iam_role" "eks_node" {
   name = "${var.project}-eks-node-role"
 
@@ -20,12 +15,21 @@ resource "aws_iam_role" "eks_node" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "admin_access" {
+resource "aws_iam_role_policy_attachment" "worker_node" {
   role       = aws_iam_role.eks_node.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" # IV-08
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
 }
 
-# A second role used by the app pods — also over-privileged.
+resource "aws_iam_role_policy_attachment" "cni" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_readonly" {
+  role       = aws_iam_role.eks_node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
 resource "aws_iam_role" "app_role" {
   name = "${var.project}-app-role"
 
@@ -35,7 +39,7 @@ resource "aws_iam_role" "app_role" {
       Action = "sts:AssumeRole"
       Effect = "Allow"
       Principal = {
-        Service = "ec2.amazonaws.com"
+        Service = "pods.eks.amazonaws.com"
       }
     }]
   })
@@ -47,11 +51,29 @@ resource "aws_iam_role_policy" "app_inline" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = "*"     # IV-08 — wildcard action.
-      Resource = "*"     # IV-08 — wildcard resource.
-    }]
+    Statement = [
+      {
+        Sid    = "ListArtifactsBucket"
+        Effect = "Allow"
+        Action = [
+          "s3:ListBucket"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.project}-artifacts"
+        ]
+      },
+      {
+        Sid    = "ReadWriteArtifactsObjects"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject"
+        ]
+        Resource = [
+          "arn:aws:s3:::${var.project}-artifacts/*"
+        ]
+      }
+    ]
   })
 }
 

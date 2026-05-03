@@ -1,11 +1,9 @@
-# SecureFlow Terraform — INTENTIONALLY VULNERABLE baseline.
-# Planted vulnerabilities are tagged with their Vulnerability Index ID.
-# DO NOT `terraform apply` this against a real AWS account — Checkov should
-# block it in the pipeline. The purpose of this tree is to give interns
-# something Checkov can flag.
+# SecureFlow Terraform — remediated baseline for Checkov/IaC hardening.
+# Do not apply blindly to a real AWS account without reviewing costs and values.
 
 terraform {
   required_version = ">= 1.5.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -33,6 +31,11 @@ variable "environment" {
   default = "dev"
 }
 
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
 module "vpc" {
   source      = "./modules/vpc"
   project     = var.project
@@ -50,18 +53,18 @@ module "s3" {
 }
 
 module "eks" {
-  source            = "./modules/eks"
-  project           = var.project
-  environment       = var.environment
-  vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnet_ids
+  source             = "./modules/eks"
+  project            = var.project
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
 }
 
 module "rds" {
-  source            = "./modules/rds"
-  project           = var.project
-  environment       = var.environment
-  vpc_id            = module.vpc.vpc_id
-  public_subnet_ids = module.vpc.public_subnet_ids
-  db_password       = "postgres" # IV-01 — hardcoded DB password reused from docker-compose.
+  source             = "./modules/rds"
+  project            = var.project
+  environment        = var.environment
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  db_password        = var.db_password
 }

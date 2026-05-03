@@ -10,3 +10,5 @@ resources:
   - auth-service.yaml
   - transaction-service.yaml
   - frontend.yaml
+  - networkpolicies.yaml
+  

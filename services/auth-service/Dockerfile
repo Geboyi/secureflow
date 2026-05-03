@@ -1,17 +1,21 @@
-# CK-01 — Vulnerable base image. python:3.9-slim carries outdated system libraries.
-FROM python:3.9-slim
+# CK-01 remediation: upgraded base image from python:3.9-slim to python:3.12-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# CK-02 / IV-05 remediation: create and use non-root user
+RUN groupadd -r app && useradd -r -u 10001 -g app app
+
 COPY app.py .
 
-# CK-02 — No USER directive. Container runs as root (uid 0).
-# IV-05 — Same: no non-root user.
-# Deliberately missing HEALTHCHECK.
+USER app
 
 EXPOSE 5001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health')" || exit 1
 
 CMD ["python", "app.py"]

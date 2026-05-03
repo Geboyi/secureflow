@@ -1,0 +1,16 @@
+
+# Local binaries
+minikube-linux-amd64
+
+# Terraform local files
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
