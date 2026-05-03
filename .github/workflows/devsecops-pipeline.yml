@@ -3,9 +3,9 @@ name: DevSecOps Pipeline
 on:
   push:
   pull_request:
-
+  workflow_dispatch:
+  
 jobs:
-
   # ---------------------------
   # STAGE 1 — SECRETS (HARD FAIL)
   # ---------------------------
@@ -23,7 +23,6 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         with:
           args: detect --log-opts="--all"
-
 
   # ---------------------------
   # STAGE 2 — CODE ANALYSIS (SOFT FAIL)
@@ -51,52 +50,55 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
   # ---------------------------
   # STAGE 3 — CONTAINER SCAN (HARD FAIL)
   # ---------------------------
   trivy-images:
-  name: Trivy Image Scan
-  runs-on: ubuntu-latest
-  needs: gitleaks
-  if: always()
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    needs: gitleaks
+    if: always()
 
-  steps:
-    - uses: actions/checkout@v4
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-    - name: Build images
-      run: |
-        docker build -t secureflow/auth-service:v1 ./services/auth-service
-        docker build -t secureflow/frontend:v1 ./services/frontend
-        docker build -t secureflow/transaction-service:v1 ./services/transaction-service
+      - name: Build images
+        run: |
+          docker build -t secureflow/auth-service:v1 ./services/auth-service
+          docker build -t secureflow/frontend:v1 ./services/frontend
+          docker build -t secureflow/transaction-service:v1 ./services/transaction-service
 
-    - name: Scan auth-service image
-      uses: aquasecurity/trivy-action@v0.36.0
-      with:
-        image-ref: 'secureflow/auth-service:v1'
-        format: 'table'
-        exit-code: '1'
-        ignore-unfixed: true
-        severity: 'CRITICAL,HIGH'
+      - name: Scan auth-service image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: secureflow/auth-service:v1
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
-    - name: Scan frontend image
-      uses: aquasecurity/trivy-action@v0.36.0
-      with:
-        image-ref: 'secureflow/frontend:v1'
-        format: 'table'
-        exit-code: '1'
-        ignore-unfixed: true
-        severity: 'CRITICAL,HIGH'
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: secureflow/frontend:v1
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
-    - name: Scan transaction-service image
-      uses: aquasecurity/trivy-action@v0.36.0
-      with:
-        image-ref: 'secureflow/transaction-service:v1'
-        format: 'table'
-        exit-code: '1'
-        ignore-unfixed: true
-        severity: 'CRITICAL,HIGH'
+      - name: Scan transaction-service image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: secureflow/transaction-service:v1
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
+  # ---------------------------
+  # STAGE 4 — KUBERNETES MANIFEST SCAN (HARD FAIL)
+  # ---------------------------
   trivy-k8s:
     name: Trivy Kubernetes Scan
     runs-on: ubuntu-latest
@@ -107,15 +109,18 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install Trivy
+      - name: Run Trivy Kubernetes config scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          scan-type: 'config'
-          scan-ref: './infra/kubernetes/base'
-          format: 'table'
-          exit-code: '1'
-          severity: 'CRITICAL,HIGH'
+          scan-type: config
+          scan-ref: ./infra/kubernetes/base
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
 
+  # ---------------------------
+  # STAGE 5 — TERRAFORM IAC SCAN (HARD FAIL)
+  # ---------------------------
   checkov:
     name: Checkov IaC Scan
     runs-on: ubuntu-latest
@@ -135,10 +140,14 @@ jobs:
           quiet: false
           soft_fail: false
 
+  # ---------------------------
+  # STAGE 6 — SECURITY GATE
+  # ---------------------------
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
     needs: [gitleaks, trivy-images, trivy-k8s, checkov, sonar]
+    if: always()
 
     steps:
       - name: Evaluate pipeline status
@@ -146,39 +155,38 @@ jobs:
           echo "Evaluating security findings..."
 
           if [ "${{ needs.gitleaks.result }}" != "success" ]; then
-            echo " Gitleaks failed — blocking merge"
+            echo "Gitleaks failed — blocking merge"
             exit 1
           fi
 
           if [ "${{ needs.trivy-images.result }}" != "success" ]; then
-            echo " Trivy image scan failed — blocking merge"
+            echo "Trivy image scan failed — blocking merge"
             exit 1
           fi
 
           if [ "${{ needs.trivy-k8s.result }}" != "success" ]; then
-            echo " Trivy K8s scan failed — blocking merge"
+            echo "Trivy Kubernetes scan failed — blocking merge"
             exit 1
           fi
 
           if [ "${{ needs.checkov.result }}" != "success" ]; then
-            echo " Checkov failed — blocking merge"
+            echo "Checkov failed — blocking merge"
             exit 1
           fi
 
-          echo " Sonar findings do NOT block merge"
+          echo "SonarCloud findings do NOT block merge"
+          echo "Security gate passed"
 
-          echo " Security gate passed"
-
-
-      - name: Post PR Comment
+      - name: Write security gate summary
         if: always()
         run: |
-          echo "### Security Gate Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### DevSecOps Findings (Blocking)" >> $GITHUB_STEP_SUMMARY
-          echo "- Gitleaks: ${{ needs.gitleaks.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Trivy: ${{ needs.trivy.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Checkov: ${{ needs.checkov.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### AppSec Findings (Non-blocking)" >> $GITHUB_STEP_SUMMARY
-          echo "- SonarCloud: Review dashboard" >> $GITHUB_STEP_SUMMARY
+          echo "### Security Gate Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### DevSecOps Findings — Blocking" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Gitleaks: ${{ needs.gitleaks.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trivy Images: ${{ needs.trivy-images.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trivy Kubernetes: ${{ needs.trivy-k8s.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Checkov: ${{ needs.checkov.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "#### AppSec Findings — Non-blocking" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SonarCloud: ${{ needs.sonar.result }}. Review SonarCloud dashboard." >> "$GITHUB_STEP_SUMMARY"
