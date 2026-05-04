@@ -39,17 +39,13 @@ spec:
               value: authdb
             - name: DB_USER
               value: authuser
-            # - name: DB_PASSWORD
-            #   valueFrom:
-            #     configMapKeyRef:
-            #       name: secureflow-config
-            #       key: AUTH_DB_PASSWORD
-          # CK-04 — privileged container with privilege escalation.
+          
           securityContext:
             privileged: false
             allowPrivilegeEscalation: false
             runAsNonRoot: true
             runAsUser: 10001
+            readOnlyRootFilesystem: true
             seccompProfile:
               type: RuntimeDefault
             capabilities:

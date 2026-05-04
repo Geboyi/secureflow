@@ -7,7 +7,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # CK-02 / IV-05 remediation: create and use non-root user
-RUN groupadd -r app && useradd -r -u 10001 -g app app
+RUN groupadd -r -g 10001 app && useradd -r -u 10001 -g app app
 
 COPY app.py .
 

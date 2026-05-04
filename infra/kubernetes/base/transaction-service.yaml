@@ -23,13 +23,11 @@ spec:
       serviceAccountName: transaction-sa
       containers:
         - name: transaction-service
-          image: secureflow/transaction-service:v1 # CK-06 remediated
+          image: secureflow/transaction-service:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5002
-          # envFrom:
-          #   - configMapRef:
-          #       name: secureflow-config
+          
           env:
             - name: DB_HOST
               value: transaction-db
@@ -37,16 +35,13 @@ spec:
               value: transactiondb
             - name: DB_USER
               value: txuser
-            # - name: DB_PASSWORD
-            #   valueFrom:
-            #     configMapKeyRef:
-            #       name: secureflow-config
-            #       key: TX_DB_PASSWORD
+           
           securityContext:
             privileged: false                # CK-04
             allowPrivilegeEscalation: false  # CK-04
             runAsNonRoot: true
             runAsUser: 10001
+            readOnlyRootFilesystem: true
             seccompProfile:
               type: RuntimeDefault
             capabilities:
