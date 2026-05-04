@@ -119,7 +119,7 @@ jobs:
           severity: CRITICAL
 
   # ---------------------------
-  # STAGE 5 — TERRAFORM IAC SCAN (HARD FAIL)
+  # STAGE 5 — TERRAFORM IAC SCAN (SOFT FAIL)
   # ---------------------------
   checkov:
     name: Checkov IaC Scan
